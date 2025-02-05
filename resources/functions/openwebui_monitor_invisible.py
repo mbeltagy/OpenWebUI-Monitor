@@ -7,6 +7,7 @@ import json
 import os
 
 
+
 class Filter:
     class Valves(BaseModel):
         API_ENDPOINT: str = Field(
@@ -24,6 +25,16 @@ class Filter:
         self.outage = False
         self.start_time = None
 
+    def _prepare_request_body(self, body: dict) -> dict:
+        """Convert body and nested objects to JSON-serializable format"""
+        body_copy = body.copy()
+        
+        if 'metadata' in body_copy and 'model' in body_copy['metadata']:
+            if hasattr(body_copy['metadata']['model'], 'model_dump'):
+                body_copy['metadata']['model'] = body_copy['metadata']['model'].model_dump()
+        
+        return body_copy
+
     def _prepare_user_dict(self, __user__: dict) -> dict:
         """将 __user__ 对象转换为可序列化的字典"""
         user_dict = dict(__user__)  # 创建副本以避免修改原始对象
@@ -37,6 +48,10 @@ class Filter:
     def inlet(
         self, body: dict, user: Optional[dict] = None, __user__: dict = {}
     ) -> dict:
+        print("Body type:", type(body))
+        print("Body content:", body)
+        print("User type:", type(__user__))
+        print("User content:", __user__)
         self.start_time = time.time()
 
         try:
@@ -46,9 +61,11 @@ class Filter:
             # 使用 _prepare_user_dict 处理 __user__ 对象
             user_dict = self._prepare_user_dict(__user__)
 
-            response = requests.post(
-                post_url, headers=headers, json={"user": user_dict, "body": body}
-            )
+            request_data = {
+                "user": user_dict,
+                "body": self._prepare_request_body(body)
+            }
+            response = requests.post(post_url, headers=headers, json=request_data)
 
             if response.status_code == 401:
                 return body
@@ -88,6 +105,10 @@ class Filter:
             return body
 
         try:
+            print("Body type:", type(body))
+            print("Body content:", body)
+            print("User type:", type(__user__))
+            print("User content:", __user__)
             post_url = f"{self.valves.API_ENDPOINT}/api/v1/outlet"
             headers = {"Authorization": f"Bearer {self.valves.API_KEY}"}
 
@@ -96,10 +117,10 @@ class Filter:
 
             request_data = {
                 "user": user_dict,
-                "body": body,
+                "body": self._prepare_request_body(body)
             }
-
             response = requests.post(post_url, headers=headers, json=request_data)
+
 
             if response.status_code == 401:
                 if __event_emitter__:
